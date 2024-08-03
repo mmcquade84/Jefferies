@@ -1,0 +1,414 @@
+-- Step 1: Create a database for the project
+CREATE DATABASE InvestmentBankingProject;
+USE InvestmentBankingProject;
+
+-- Step 2: Create tables for storing raw data
+CREATE TABLE Securities (
+    SecurityID INT PRIMARY KEY,
+    SecurityName VARCHAR(255),
+    SecurityType VARCHAR(50),
+    Issuer VARCHAR(255),
+    IssueDate DATE,
+    MaturityDate DATE,
+    CouponRate DECIMAL(5, 2)
+);
+
+CREATE TABLE Transactions (
+    TransactionID INT PRIMARY KEY,
+    SecurityID INT,
+    TransactionType VARCHAR(10),
+    TransactionDate DATE,
+    Quantity INT,
+    Price DECIMAL(10, 2),
+    BrokerID INT,
+    FOREIGN KEY (SecurityID) REFERENCES Securities(SecurityID)
+);
+
+CREATE TABLE Brokers (
+    BrokerID INT PRIMARY KEY,
+    BrokerName VARCHAR(255),
+    Region VARCHAR(50)
+);
+
+CREATE TABLE Clients (
+    ClientID INT PRIMARY KEY,
+    ClientName VARCHAR(255),
+    ClientType VARCHAR(50),
+    RiskProfile VARCHAR(50),
+    Region VARCHAR(50)
+);
+
+CREATE TABLE Portfolios (
+    PortfolioID INT PRIMARY KEY,
+    ClientID INT,
+    PortfolioName VARCHAR(255),
+    CreationDate DATE,
+    FOREIGN KEY (ClientID) REFERENCES Clients(ClientID)
+);
+
+CREATE TABLE PortfolioHoldings (
+    PortfolioID INT,
+    SecurityID INT,
+    Quantity INT,
+    CostBasis DECIMAL(10, 2),
+    PRIMARY KEY (PortfolioID, SecurityID),
+    FOREIGN KEY (PortfolioID) REFERENCES Portfolios(PortfolioID),
+    FOREIGN KEY (SecurityID) REFERENCES Securities(SecurityID)
+);
+
+-- Step 3: Insert sample data into the tables
+-- Securities
+INSERT INTO Securities (SecurityID, SecurityName, SecurityType, Issuer, IssueDate, MaturityDate, CouponRate) VALUES
+(1, 'US Treasury Bond 10Y', 'Bond', 'US Government', '2015-01-15', '2025-01-15', 2.5),
+(2, 'Corporate Bond XYZ', 'Bond', 'XYZ Corp', '2018-03-20', '2028-03-20', 5.0),
+(3, 'Tech Stock ABC', 'Stock', 'ABC Tech', '2020-06-10', NULL, NULL);
+
+-- Brokers
+INSERT INTO Brokers (BrokerID, BrokerName, Region) VALUES
+(1, 'Broker A', 'North America'),
+(2, 'Broker B', 'Europe');
+
+-- Transactions
+INSERT INTO Transactions (TransactionID, SecurityID, TransactionType, TransactionDate, Quantity, Price, BrokerID) VALUES
+(1, 1, 'BUY', '2021-01-10', 100, 950.00, 1),
+(2, 2, 'BUY', '2021-01-12', 200, 980.00, 2),
+(3, 3, 'BUY', '2021-01-15', 150, 120.00, 1),
+(4, 1, 'SELL', '2021-06-10', 50, 960.00, 2);
+
+-- Clients
+INSERT INTO Clients (ClientID, ClientName, ClientType, RiskProfile, Region) VALUES
+(1, 'Global Investments Ltd', 'Institutional', 'Moderate', 'North America'),
+(2, 'Private Wealth Client A', 'Individual', 'High', 'Europe');
+
+-- Portfolios
+INSERT INTO Portfolios (PortfolioID, ClientID, PortfolioName, CreationDate) VALUES
+(1, 1, 'Global Portfolio', '2020-01-01'),
+(2, 2, 'Wealth Growth Portfolio', '2021-01-01');
+
+-- PortfolioHoldings
+INSERT INTO PortfolioHoldings (PortfolioID, SecurityID, Quantity, CostBasis) VALUES
+(1, 1, 100, 950.00),
+(1, 2, 200, 980.00),
+(2, 3, 150, 120.00);
+
+-- Step 4: Create views for complex analysis
+-- View to calculate current value of portfolio holdings
+CREATE VIEW PortfolioCurrentValue AS
+SELECT 
+    ph.PortfolioID,
+    s.SecurityName,
+    ph.Quantity,
+    t.Price AS CurrentPrice,
+    (ph.Quantity * t.Price) AS CurrentValue
+FROM 
+    PortfolioHoldings ph
+JOIN 
+    Securities s ON ph.SecurityID = s.SecurityID
+JOIN 
+    (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+     FROM Transactions
+     GROUP BY SecurityID) lt ON s.SecurityID = lt.SecurityID
+JOIN 
+    Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate;
+
+-- View to calculate portfolio performance
+CREATE VIEW PortfolioPerformance AS
+SELECT
+    p.PortfolioID,
+    p.PortfolioName,
+    SUM(ph.Quantity * t.Price) AS TotalCurrentValue,
+    SUM(ph.Quantity * ph.CostBasis) AS TotalCostBasis,
+    (SUM(ph.Quantity * t.Price) - SUM(ph.Quantity * ph.CostBasis)) AS UnrealizedGainLoss,
+    ((SUM(ph.Quantity * t.Price) - SUM(ph.Quantity * ph.CostBasis)) / SUM(ph.Quantity * ph.CostBasis)) * 100 AS PerformancePercentage
+FROM
+    Portfolios p
+JOIN 
+    PortfolioHoldings ph ON p.PortfolioID = ph.PortfolioID
+JOIN 
+    (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+     FROM Transactions
+     GROUP BY SecurityID) lt ON ph.SecurityID = lt.SecurityID
+JOIN 
+    Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+GROUP BY
+    p.PortfolioID, p.PortfolioName;
+
+-- Step 5: Create stored procedures for risk management
+-- Procedure to calculate Value at Risk (VaR) for a portfolio
+DELIMITER //
+
+CREATE PROCEDURE CalculateVaR (IN PortfolioID INT, IN ConfidenceLevel DECIMAL(5, 2))
+BEGIN
+    DECLARE TotalCurrentValue DECIMAL(10, 2);
+    DECLARE Volatility DECIMAL(5, 2);
+    DECLARE VaR DECIMAL(10, 2);
+    
+    -- Calculate total current value of the portfolio
+    SELECT SUM(ph.Quantity * t.Price) INTO TotalCurrentValue
+    FROM PortfolioHoldings ph
+    JOIN 
+        (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+         FROM Transactions
+         GROUP BY SecurityID) lt ON ph.SecurityID = lt.SecurityID
+    JOIN 
+        Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+    WHERE ph.PortfolioID = PortfolioID;
+    
+    -- Assume a fixed volatility for demonstration purposes
+    SET Volatility = 0.05; -- 5% daily volatility
+    
+    -- Calculate VaR
+    SET VaR = TotalCurrentValue * Volatility * ConfidenceLevel;
+    
+    SELECT PortfolioID, TotalCurrentValue, Volatility, ConfidenceLevel, VaR;
+END //
+
+DELIMITER ;
+
+-- Step 6: Create a function to assess compliance with investment guidelines
+DELIMITER //
+
+CREATE FUNCTION CheckCompliance (PortfolioID INT) RETURNS VARCHAR(255)
+BEGIN
+    DECLARE TotalBonds INT;
+    DECLARE TotalStocks INT;
+    DECLARE ComplianceStatus VARCHAR(255);
+    
+    -- Calculate total bonds and stocks in the portfolio
+    SELECT 
+        SUM(CASE WHEN s.SecurityType = 'Bond' THEN ph.Quantity ELSE 0 END),
+        SUM(CASE WHEN s.SecurityType = 'Stock' THEN ph.Quantity ELSE 0 END)
+    INTO
+        TotalBonds, TotalStocks
+    FROM 
+        PortfolioHoldings ph
+    JOIN 
+        Securities s ON ph.SecurityID = s.SecurityID
+    WHERE 
+        ph.PortfolioID = PortfolioID;
+    
+    -- Check compliance based on a hypothetical rule: at least 50% in bonds
+    IF TotalBonds >= (TotalBonds + TotalStocks) / 2 THEN
+        SET ComplianceStatus = 'Compliant';
+    ELSE
+        SET ComplianceStatus = 'Non-Compliant';
+    END IF;
+    
+    RETURN ComplianceStatus;
+END //
+
+DELIMITER ;
+
+-- Step 7: Generate reports using complex queries
+-- Query to generate a detailed portfolio report
+SELECT
+    c.ClientName,
+    p.PortfolioName,
+    s.SecurityName,
+    ph.Quantity,
+    t.Price AS CurrentPrice,
+    (ph.Quantity * t.Price) AS CurrentValue,
+    ((ph.Quantity * t.Price) - (ph.Quantity * ph.CostBasis)) AS UnrealizedGainLoss
+FROM
+    Clients c
+JOIN
+    Portfolios p ON c.ClientID = p.ClientID
+JOIN
+    PortfolioHoldings ph ON p.PortfolioID = ph.PortfolioID
+JOIN
+    Securities s ON ph.SecurityID = s.SecurityID
+JOIN
+    (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+     FROM Transactions
+     GROUP BY SecurityID) lt ON s.SecurityID = lt.SecurityID
+JOIN
+    Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+ORDER BY
+    c.ClientName, p.PortfolioName, s.SecurityName;
+
+-- Query to generate a risk report
+SELECT
+    p.PortfolioID,
+    p.PortfolioName,
+    SUM(ph.Quantity * t.Price) AS TotalCurrentValue,
+    CheckCompliance(p.PortfolioID) AS ComplianceStatus
+FROM
+    Portfolios p
+JOIN
+    PortfolioHoldings ph ON p.Portfolio
+-- Query to generate a risk report
+SELECT
+    p.PortfolioID,
+    p.PortfolioName,
+    SUM(ph.Quantity * t.Price) AS TotalCurrentValue,
+    CheckCompliance(p.PortfolioID) AS ComplianceStatus
+FROM
+    Portfolios p
+JOIN
+    PortfolioHoldings ph ON p.PortfolioID = ph.PortfolioID
+JOIN
+    (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+     FROM Transactions
+     GROUP BY SecurityID) lt ON ph.SecurityID = lt.SecurityID
+JOIN
+    Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+GROUP BY
+    p.PortfolioID, p.PortfolioName;
+
+-- Step 8: Additional complex queries and procedures
+-- Query to calculate the exposure of each client to different asset classes
+CREATE VIEW ClientExposure AS
+SELECT
+    c.ClientName,
+    s.SecurityType,
+    SUM(ph.Quantity * t.Price) AS Exposure
+FROM
+    Clients c
+JOIN
+    Portfolios p ON c.ClientID = p.ClientID
+JOIN
+    PortfolioHoldings ph ON p.PortfolioID = ph.PortfolioID
+JOIN
+    Securities s ON ph.SecurityID = s.SecurityID
+JOIN
+    (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+     FROM Transactions
+     GROUP BY SecurityID) lt ON s.SecurityID = lt.SecurityID
+JOIN
+    Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+GROUP BY
+    c.ClientName, s.SecurityType;
+
+-- Procedure to rebalance a portfolio based on target allocations
+DELIMITER //
+
+CREATE PROCEDURE RebalancePortfolio (IN PortfolioID INT, IN TargetBondAllocation DECIMAL(5, 2), IN TargetStockAllocation DECIMAL(5, 2))
+BEGIN
+    DECLARE TotalValue DECIMAL(10, 2);
+    DECLARE CurrentBondValue DECIMAL(10, 2);
+    DECLARE CurrentStockValue DECIMAL(10, 2);
+    DECLARE RequiredBondValue DECIMAL(10, 2);
+    DECLARE RequiredStockValue DECIMAL(10, 2);
+    
+    -- Calculate total current value of the portfolio
+    SELECT SUM(ph.Quantity * t.Price) INTO TotalValue
+    FROM PortfolioHoldings ph
+    JOIN 
+        (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+         FROM Transactions
+         GROUP BY SecurityID) lt ON ph.SecurityID = lt.SecurityID
+    JOIN 
+        Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+    WHERE ph.PortfolioID = PortfolioID;
+    
+    -- Calculate current bond and stock values
+    SELECT SUM(ph.Quantity * t.Price) INTO CurrentBondValue
+    FROM PortfolioHoldings ph
+    JOIN 
+        Securities s ON ph.SecurityID = s.SecurityID
+    JOIN 
+        (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+         FROM Transactions
+         GROUP BY SecurityID) lt ON s.SecurityID = lt.SecurityID
+    JOIN 
+        Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+    WHERE ph.PortfolioID = PortfolioID AND s.SecurityType = 'Bond';
+    
+    SELECT SUM(ph.Quantity * t.Price) INTO CurrentStockValue
+    FROM PortfolioHoldings ph
+    JOIN 
+        Securities s ON ph.SecurityID = s.SecurityID
+    JOIN 
+        (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+         FROM Transactions
+         GROUP BY SecurityID) lt ON s.SecurityID = lt.SecurityID
+    JOIN 
+        Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+    WHERE ph.PortfolioID = PortfolioID AND s.SecurityType = 'Stock';
+    
+    -- Calculate required bond and stock values based on target allocations
+    SET RequiredBondValue = TotalValue * TargetBondAllocation;
+    SET RequiredStockValue = TotalValue * TargetStockAllocation;
+    
+    -- Insert logic for rebalancing the portfolio
+    -- For simplicity, assume we buy/sell required quantity to meet target allocation
+    -- Detailed implementation would involve more complex trading logic
+    
+    -- Rebalance bonds
+    IF CurrentBondValue < RequiredBondValue THEN
+        INSERT INTO Transactions (SecurityID, TransactionType, TransactionDate, Quantity, Price, BrokerID)
+        SELECT SecurityID, 'BUY', CURDATE(), (RequiredBondValue - CurrentBondValue) / Price, Price, 1
+        FROM Securities
+        WHERE SecurityType = 'Bond' AND EXISTS (
+            SELECT 1 FROM PortfolioHoldings WHERE PortfolioID = PortfolioID AND SecurityID = Securities.SecurityID
+        );
+    ELSEIF CurrentBondValue > RequiredBondValue THEN
+        INSERT INTO Transactions (SecurityID, TransactionType, TransactionDate, Quantity, Price, BrokerID)
+        SELECT SecurityID, 'SELL', CURDATE(), (CurrentBondValue - RequiredBondValue) / Price, Price, 1
+        FROM Securities
+        WHERE SecurityType = 'Bond' AND EXISTS (
+            SELECT 1 FROM PortfolioHoldings WHERE PortfolioID = PortfolioID AND SecurityID = Securities.SecurityID
+        );
+    END IF;
+    
+    -- Rebalance stocks
+    IF CurrentStockValue < RequiredStockValue THEN
+        INSERT INTO Transactions (SecurityID, TransactionType, TransactionDate, Quantity, Price, BrokerID)
+        SELECT SecurityID, 'BUY', CURDATE(), (RequiredStockValue - CurrentStockValue) / Price, Price, 1
+        FROM Securities
+        WHERE SecurityType = 'Stock' AND EXISTS (
+            SELECT 1 FROM PortfolioHoldings WHERE PortfolioID = PortfolioID AND SecurityID = Securities.SecurityID
+        );
+    ELSEIF CurrentStockValue > RequiredStockValue THEN
+        INSERT INTO Transactions (SecurityID, TransactionType, TransactionDate, Quantity, Price, BrokerID)
+        SELECT SecurityID, 'SELL', CURDATE(), (CurrentStockValue - RequiredStockValue) / Price, Price, 1
+        FROM Securities
+        WHERE SecurityType = 'Stock' AND EXISTS (
+            SELECT 1 FROM PortfolioHoldings WHERE PortfolioID = PortfolioID AND SecurityID = Securities.SecurityID
+        );
+    END IF;
+    
+    -- Update portfolio holdings based on the rebalancing transactions
+    UPDATE PortfolioHoldings ph
+    JOIN
+        (SELECT SecurityID, SUM(CASE WHEN TransactionType = 'BUY' THEN Quantity ELSE -Quantity END) AS NetQuantity
+         FROM Transactions
+         WHERE PortfolioID = PortfolioID
+         GROUP BY SecurityID) t ON ph.SecurityID = t.SecurityID
+    SET ph.Quantity = ph.Quantity + t.NetQuantity
+    WHERE ph.PortfolioID = PortfolioID;
+END //
+
+DELIMITER ;
+
+-- Step 9: Execute complex queries and procedures
+-- Calculate Value at Risk for a portfolio
+CALL CalculateVaR(1, 0.99);
+
+-- Rebalance a portfolio to target allocations
+CALL RebalancePortfolio(1, 0.60, 0.40);
+
+-- Generate client exposure report
+SELECT * FROM ClientExposure;
+
+-- Generate detailed portfolio report
+SELECT * FROM PortfolioCurrentValue;
+
+-- Generate portfolio performance report
+SELECT * FROM PortfolioPerformance;
+
+-- Generate risk report
+SELECT * FROM (
+    SELECT p.PortfolioID, p.PortfolioName, SUM(ph.Quantity * t.Price) AS TotalCurrentValue, CheckCompliance(p.PortfolioID) AS ComplianceStatus
+    FROM Portfolios p
+    JOIN PortfolioHoldings ph ON p.PortfolioID = ph.PortfolioID
+    JOIN (SELECT SecurityID, MAX(TransactionDate) AS LatestDate
+          FROM Transactions
+          GROUP BY SecurityID) lt ON ph.SecurityID = lt.SecurityID
+    JOIN Transactions t ON lt.SecurityID = t.SecurityID AND lt.LatestDate = t.TransactionDate
+    GROUP BY p.PortfolioID, p.PortfolioName
+) AS RiskReport;
+
+-- The above SQL script demonstrates a comprehensive investment banking and capital markets project.
+-- It includes creating necessary tables, inserting sample data, creating views and stored procedures
+-- for complex analysis, risk management, compliance checks, and generating various reports.
