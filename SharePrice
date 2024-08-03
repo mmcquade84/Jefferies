@@ -1,0 +1,82 @@
+-- SQL Script to Analyze Share Price Performance of Top 5 Companies by Market Capitalization
+-- This script assumes the existence of tables containing market data and company information.
+-- It will identify the top 5 companies by market capitalization and analyze their share price performance.
+
+-- Step 1: Create necessary tables if they don't already exist
+
+CREATE TABLE Companies (
+    CompanyID INT PRIMARY KEY,
+    CompanyName VARCHAR(255),
+    Industry VARCHAR(50),
+    MarketCap DECIMAL(15, 2)
+);
+
+CREATE TABLE MarketData (
+    DataID INT PRIMARY KEY,
+    CompanyID INT,
+    DataDate DATE,
+    StockPrice DECIMAL(10, 2),
+    Volume INT,
+    FOREIGN KEY (CompanyID) REFERENCES Companies(CompanyID)
+);
+
+-- Step 2: Insert sample data into the tables (Optional, if not already present)
+-- Note: In a real-world scenario, this data would be populated from existing records.
+
+INSERT INTO Companies (CompanyID, CompanyName, Industry, MarketCap) VALUES
+(1, 'Tech Innovators Inc', 'Technology', 5000000000.00),
+(2, 'Health Solutions Ltd', 'Healthcare', 3000000000.00),
+(3, 'Global Retailers Inc', 'Retail', 2500000000.00),
+(4, 'Finance Giants LLC', 'Finance', 4000000000.00),
+(5, 'Energy Leaders Co', 'Energy', 3500000000.00),
+(6, 'Automotive Pioneers', 'Automotive', 2000000000.00);
+
+INSERT INTO MarketData (DataID, CompanyID, DataDate, StockPrice, Volume) VALUES
+(1, 1, '2024-07-01', 50.00, 1000000),
+(2, 2, '2024-07-01', 30.00, 800000),
+(3, 3, '2024-07-01', 25.00, 600000),
+(4, 4, '2024-07-01', 40.00, 700000),
+(5, 5, '2024-07-01', 35.00, 900000),
+(6, 6, '2024-07-01', 20.00, 500000),
+(7, 1, '2024-07-02', 51.00, 1100000),
+(8, 2, '2024-07-02', 31.00, 850000),
+(9, 3, '2024-07-02', 26.00, 650000),
+(10, 4, '2024-07-02', 41.00, 720000),
+(11, 5, '2024-07-02', 36.00, 950000),
+(12, 6, '2024-07-02', 21.00, 520000);
+
+-- Step 3: Create a view to identify the top 5 companies by market capitalization
+
+CREATE VIEW Top5Companies AS
+SELECT
+    CompanyID,
+    CompanyName,
+    MarketCap
+FROM
+    Companies
+ORDER BY
+    MarketCap DESC
+LIMIT 5;
+
+-- Step 4: Create a view to analyze share price performance for the top 5 companies
+
+CREATE VIEW Top5SharePricePerformance AS
+SELECT
+    md.CompanyID,
+    c.CompanyName,
+    md.DataDate,
+    md.StockPrice,
+    md.Volume
+FROM
+    MarketData md
+JOIN
+    Top5Companies c ON md.CompanyID = c.CompanyID
+ORDER BY
+    c.CompanyName, md.DataDate;
+
+-- Step 5: Query the view to get the share price performance of the top 5 companies
+
+SELECT * FROM Top5SharePricePerformance;
+
+-- The above SQL script demonstrates how to analyze the share price performance of the top 5 companies by market capitalization.
+-- It includes creating necessary tables, inserting sample data, creating views for analysis, and querying the views to generate the report.
