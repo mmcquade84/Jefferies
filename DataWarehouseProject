@@ -1,0 +1,99 @@
+-- Step 1: Extract raw trading data from the source database
+CREATE TABLE raw_trades (
+    transaction_id INT PRIMARY KEY,
+    instrument_type VARCHAR(20),
+    instrument_id INT,
+    trade_date DATE,
+    trade_time TIME,
+    volume INT,
+    price DECIMAL(10, 2)
+);
+
+INSERT INTO raw_trades (transaction_id, instrument_type, instrument_id, trade_date, trade_time, volume, price)
+VALUES
+(1, 'Equity', 101, '2023-01-01', '09:30:00', 1000, 150.25),
+(2, 'Bond', 201, '2023-01-01', '10:00:00', 2000, 101.75),
+-- Add more data as needed
+;
+
+-- Step 2: Create staging tables for data transformation
+CREATE TABLE staging_equity (
+    instrument_id INT,
+    trade_date DATE,
+    total_volume INT,
+    average_price DECIMAL(10, 2)
+);
+
+CREATE TABLE staging_bond (
+    instrument_id INT,
+    trade_date DATE,
+    total_volume INT,
+    average_price DECIMAL(10, 2)
+);
+
+-- Step 3: Transform and load data into staging tables
+INSERT INTO staging_equity (instrument_id, trade_date, total_volume, average_price)
+SELECT 
+    instrument_id,
+    trade_date,
+    SUM(volume) AS total_volume,
+    AVG(price) AS average_price
+FROM 
+    raw_trades
+WHERE 
+    instrument_type = 'Equity'
+GROUP BY 
+    instrument_id, 
+    trade_date;
+
+INSERT INTO staging_bond (instrument_id, trade_date, total_volume, average_price)
+SELECT 
+    instrument_id,
+    trade_date,
+    SUM(volume) AS total_volume,
+    AVG(price) AS average_price
+FROM 
+    raw_trades
+WHERE 
+    instrument_type = 'Bond'
+GROUP BY 
+    instrument_id, 
+    trade_date;
+
+-- Step 4: Create the final data warehouse tables
+CREATE TABLE dw_equity_trades (
+    instrument_id INT,
+    trade_date DATE,
+    total_volume INT,
+    average_price DECIMAL(10, 2)
+);
+
+CREATE TABLE dw_bond_trades (
+    instrument_id INT,
+    trade_date DATE,
+    total_volume INT,
+    average_price DECIMAL(10, 2)
+);
+
+-- Step 5: Load data from staging tables into the data warehouse
+INSERT INTO dw_equity_trades (instrument_id, trade_date, total_volume, average_price)
+SELECT 
+    instrument_id,
+    trade_date,
+    total_volume,
+    average_price
+FROM 
+    staging_equity;
+
+INSERT INTO dw_bond_trades (instrument_id, trade_date, total_volume, average_price)
+SELECT 
+    instrument_id,
+    trade_date,
+    total_volume,
+    average_price
+FROM 
+    staging_bond;
+
+-- Step 6: Verify the data in the data warehouse
+SELECT * FROM dw_equity_trades;
+SELECT * FROM dw_bond_trades;
