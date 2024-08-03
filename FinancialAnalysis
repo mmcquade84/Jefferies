@@ -1,0 +1,209 @@
+-- SQL Script for Financial Analysis of a Company Raising Capital
+-- This script is designed for an investment bank performing comprehensive financial analysis
+-- to assist a company in raising capital. The script involves creating necessary tables,
+-- inserting sample data, performing complex financial analysis, and generating detailed reports.
+
+-- Step 1: Create necessary tables to store financial data and analysis results
+
+CREATE TABLE Companies (
+    CompanyID INT PRIMARY KEY,
+    CompanyName VARCHAR(255),
+    Industry VARCHAR(50),
+    MarketCap DECIMAL(15, 2),
+    Revenue DECIMAL(15, 2),
+    EBITDA DECIMAL(15, 2),
+    NetIncome DECIMAL(15, 2),
+    TotalAssets DECIMAL(15, 2),
+    TotalLiabilities DECIMAL(15, 2)
+);
+
+CREATE TABLE FinancialStatements (
+    StatementID INT PRIMARY KEY,
+    CompanyID INT,
+    StatementType VARCHAR(50),
+    StatementDate DATE,
+    LineItem VARCHAR(255),
+    Amount DECIMAL(15, 2),
+    FOREIGN KEY (CompanyID) REFERENCES Companies(CompanyID)
+);
+
+CREATE TABLE MarketData (
+    DataID INT PRIMARY KEY,
+    CompanyID INT,
+    DataDate DATE,
+    StockPrice DECIMAL(10, 2),
+    Volume INT,
+    FOREIGN KEY (CompanyID) REFERENCES Companies(CompanyID)
+);
+
+CREATE TABLE ValuationMetrics (
+    MetricID INT PRIMARY KEY,
+    CompanyID INT,
+    ValuationDate DATE,
+    EV_EBITDA DECIMAL(10, 2),
+    P_E DECIMAL(10, 2),
+    P_S DECIMAL(10, 2),
+    FOREIGN KEY (CompanyID) REFERENCES Companies(CompanyID)
+);
+
+-- Step 2: Insert sample data into the tables
+-- Companies
+INSERT INTO Companies (CompanyID, CompanyName, Industry, MarketCap, Revenue, EBITDA, NetIncome, TotalAssets, TotalLiabilities) VALUES
+(1, 'Tech Innovators Inc', 'Technology', 5000000000.00, 2000000000.00, 500000000.00, 200000000.00, 3000000000.00, 1500000000.00),
+(2, 'Health Solutions Ltd', 'Healthcare', 3000000000.00, 1500000000.00, 400000000.00, 150000000.00, 2500000000.00, 1000000000.00);
+
+-- FinancialStatements
+INSERT INTO FinancialStatements (StatementID, CompanyID, StatementType, StatementDate, LineItem, Amount) VALUES
+(1, 1, 'Income Statement', '2023-12-31', 'Revenue', 2000000000.00),
+(2, 1, 'Income Statement', '2023-12-31', 'EBITDA', 500000000.00),
+(3, 1, 'Income Statement', '2023-12-31', 'Net Income', 200000000.00),
+(4, 1, 'Balance Sheet', '2023-12-31', 'Total Assets', 3000000000.00),
+(5, 1, 'Balance Sheet', '2023-12-31', 'Total Liabilities', 1500000000.00),
+(6, 2, 'Income Statement', '2023-12-31', 'Revenue', 1500000000.00),
+(7, 2, 'Income Statement', '2023-12-31', 'EBITDA', 400000000.00),
+(8, 2, 'Income Statement', '2023-12-31', 'Net Income', 150000000.00),
+(9, 2, 'Balance Sheet', '2023-12-31', 'Total Assets', 2500000000.00),
+(10, 2, 'Balance Sheet', '2023-12-31', 'Total Liabilities', 1000000000.00);
+
+-- MarketData
+INSERT INTO MarketData (DataID, CompanyID, DataDate, StockPrice, Volume) VALUES
+(1, 1, '2024-07-01', 50.00, 1000000),
+(2, 2, '2024-07-01', 30.00, 800000);
+
+-- Step 3: Create views for complex analysis
+-- View to calculate Enterprise Value (EV) and key valuation metrics
+CREATE VIEW CompanyValuation AS
+SELECT 
+    c.CompanyID,
+    c.CompanyName,
+    c.MarketCap,
+    c.TotalLiabilities,
+    c.TotalAssets - c.TotalLiabilities AS EquityValue,
+    (c.MarketCap + c.TotalLiabilities - (c.TotalAssets - c.TotalLiabilities)) AS EnterpriseValue,
+    c.EBITDA,
+    (c.MarketCap + c.TotalLiabilities - (c.TotalAssets - c.TotalLiabilities)) / c.EBITDA AS EV_EBITDA,
+    c.NetIncome,
+    c.MarketCap / c.NetIncome AS P_E,
+    c.Revenue,
+    c.MarketCap / c.Revenue AS P_S
+FROM 
+    Companies c;
+
+-- View to aggregate financial statements
+CREATE VIEW AggregatedFinancials AS
+SELECT 
+    CompanyID,
+    StatementType,
+    StatementDate,
+    SUM(Amount) AS TotalAmount
+FROM 
+    FinancialStatements
+GROUP BY 
+    CompanyID, StatementType, StatementDate;
+
+-- Step 4: Create stored procedures for advanced financial analysis
+-- Procedure to calculate Discounted Cash Flow (DCF) valuation
+DELIMITER //
+
+CREATE PROCEDURE CalculateDCF (IN CompanyID INT, IN GrowthRate DECIMAL(5, 2), IN DiscountRate DECIMAL(5, 2))
+BEGIN
+    DECLARE Revenue DECIMAL(15, 2);
+    DECLARE EBITDA DECIMAL(15, 2);
+    DECLARE NetIncome DECIMAL(15, 2);
+    DECLARE FreeCashFlow DECIMAL(15, 2);
+    DECLARE TerminalValue DECIMAL(15, 2);
+    DECLARE DCFValue DECIMAL(15, 2);
+
+    -- Get current financial metrics
+    SELECT Revenue, EBITDA, NetIncome INTO Revenue, EBITDA, NetIncome
+    FROM Companies
+    WHERE CompanyID = CompanyID;
+
+    -- Assume Free Cash Flow is 80% of Net Income for simplicity
+    SET FreeCashFlow = NetIncome * 0.80;
+
+    -- Calculate Terminal Value using perpetuity growth model
+    SET TerminalValue = FreeCashFlow * (1 + GrowthRate) / (DiscountRate - GrowthRate);
+
+    -- Calculate DCF Value (simplified 1-year projection)
+    SET DCFValue = FreeCashFlow / (1 + DiscountRate) + TerminalValue / (1 + DiscountRate);
+
+    SELECT CompanyID, Revenue, EBITDA, NetIncome, FreeCashFlow, TerminalValue, DCFValue;
+END //
+
+DELIMITER ;
+
+-- Step 5: Create a function to assess financial health based on key ratios
+DELIMITER //
+
+CREATE FUNCTION AssessFinancialHealth (CompanyID INT) RETURNS VARCHAR(255)
+BEGIN
+    DECLARE DebtToEquity DECIMAL(10, 2);
+    DECLARE CurrentRatio DECIMAL(10, 2);
+    DECLARE FinancialHealth VARCHAR(255);
+
+    -- Calculate Debt to Equity ratio
+    SELECT (TotalLiabilities / (TotalAssets - TotalLiabilities)) INTO DebtToEquity
+    FROM Companies
+    WHERE CompanyID = CompanyID;
+
+    -- Assume a fixed Current Ratio for demonstration purposes
+    SET CurrentRatio = 1.5; -- For simplicity
+
+    -- Assess financial health based on ratios
+    IF DebtToEquity < 1.0 AND CurrentRatio > 1.0 THEN
+        SET FinancialHealth = 'Healthy';
+    ELSE
+        SET FinancialHealth = 'Unhealthy';
+    END IF;
+
+    RETURN FinancialHealth;
+END //
+
+DELIMITER ;
+
+-- Step 6: Generate complex reports using advanced queries
+-- Query to generate a detailed company valuation report
+SELECT
+    v.CompanyID,
+    v.CompanyName,
+    v.EquityValue,
+    v.EnterpriseValue,
+    v.EV_EBITDA,
+    v.P_E,
+    v.P_S
+FROM
+    CompanyValuation v
+ORDER BY
+    v.CompanyName;
+
+-- Query to generate a financial health assessment report
+SELECT
+    c.CompanyName,
+    AssessFinancialHealth(c.CompanyID) AS FinancialHealth
+FROM
+    Companies c;
+
+-- Query to generate a Discounted Cash Flow (DCF) valuation report
+CALL CalculateDCF(1, 0.05, 0.10); -- Example for company with ID 1
+
+-- Generate reports for market data analysis
+SELECT
+    m.CompanyID,
+    c.CompanyName,
+    m.DataDate,
+    m.StockPrice,
+    m.Volume,
+    (m.StockPrice * m.Volume) AS MarketValueTraded
+FROM
+    MarketData m
+JOIN
+    Companies c ON m.CompanyID = c.CompanyID
+ORDER BY
+    m.DataDate DESC;
+
+-- The above SQL script demonstrates a comprehensive financial analysis and valuation project
+-- for raising capital. It includes creating necessary tables, inserting sample data,
+-- creating views and stored procedures for complex analysis, and generating various reports.
+Footer
+© 2024 GitHub, Inc.
