@@ -1,0 +1,42 @@
+-- Step 1: Extract raw bond trading data from the source database
+CREATE TABLE raw_bond_trades (
+    bond_id INT PRIMARY KEY,
+    trade_date DATE,
+    trade_time TIME,
+    volume INT,
+    price DECIMAL(10, 2),
+    yield DECIMAL(5, 2)
+);
+
+INSERT INTO raw_bond_trades (bond_id, trade_date, trade_time, volume, price, yield)
+VALUES
+(1, '2023-01-01', '09:30:00', 1000, 102.50, 3.45),
+(2, '2023-01-01', '10:00:00', 2000, 101.75, 3.50),
+-- Add more data as needed
+;
+
+-- Step 2: Create the transformed data table in the data mart
+CREATE TABLE fixed_income_data_mart (
+    bond_id INT,
+    trade_date DATE,
+    total_volume INT,
+    average_price DECIMAL(10, 2),
+    average_yield DECIMAL(5, 2)
+);
+
+-- Step 3: Transform and load data into the data mart
+INSERT INTO fixed_income_data_mart (bond_id, trade_date, total_volume, average_price, average_yield)
+SELECT 
+    bond_id,
+    trade_date,
+    SUM(volume) AS total_volume,
+    AVG(price) AS average_price,
+    AVG(yield) AS average_yield
+FROM 
+    raw_bond_trades
+GROUP BY 
+    bond_id, 
+    trade_date;
+
+-- Step 4: Verify the data in the data mart
+SELECT * FROM fixed_income_data_mart;
