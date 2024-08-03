@@ -1,0 +1,40 @@
+-- Step 1: Extract raw trading data from the source database
+CREATE TABLE raw_trades (
+    transaction_id INT PRIMARY KEY,
+    stock_symbol VARCHAR(10),
+    trade_date DATE,
+    trade_time TIME,
+    volume INT,
+    price DECIMAL(10, 2)
+);
+
+INSERT INTO raw_trades (transaction_id, stock_symbol, trade_date, trade_time, volume, price)
+VALUES
+(1, 'AAPL', '2023-01-01', '09:30:00', 1000, 150.25),
+(2, 'GOOG', '2023-01-01', '09:35:00', 500, 2800.50),
+-- Add more data as needed
+;
+
+-- Step 2: Create the transformed data table in the data mart
+CREATE TABLE equity_trading_data_mart (
+    stock_symbol VARCHAR(10),
+    trade_date DATE,
+    total_volume INT,
+    average_price DECIMAL(10, 2)
+);
+
+-- Step 3: Transform and load data into the data mart
+INSERT INTO equity_trading_data_mart (stock_symbol, trade_date, total_volume, average_price)
+SELECT 
+    stock_symbol,
+    trade_date,
+    SUM(volume) AS total_volume,
+    AVG(price) AS average_price
+FROM 
+    raw_trades
+GROUP BY 
+    stock_symbol, 
+    trade_date;
+
+-- Step 4: Verify the data in the data mart
+SELECT * FROM equity_trading_data_mart;
